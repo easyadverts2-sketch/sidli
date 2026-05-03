@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { AnimatedTimeline } from "./components/animated-timeline";
-import { BookingCalendar } from "./components/booking-calendar";
+import { BookingSection } from "./components/booking/BookingSection";
 import { ChatWidget } from "./components/chat-widget";
 import { CooperationPillars } from "./components/cooperation-pillars";
 import { ServiceVisual } from "./components/service-visual";
@@ -183,9 +183,9 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="container-page pb-16">
+        <section id="rezervace" className="container-page pb-16">
           <p className="section-lead mb-5">{siteConfig.meetingAdminHint}</p>
-          <BookingCalendar />
+          <BookingSection />
         </section>
         <ChatWidget />
       </main>
