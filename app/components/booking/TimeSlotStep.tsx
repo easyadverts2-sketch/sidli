@@ -43,11 +43,12 @@ export function TimeSlotStep({ meetingType, date, value, onChange }: TimeSlotSte
           `/api/booking/availability?date=${encodeURIComponent(date)}&meetingType=${encodeURIComponent(meetingType)}`,
           { cache: "no-store" },
         );
-        const data = (await res.json()) as AvailabilityDayPayload & { error?: string };
+        const data = (await res.json()) as AvailabilityDayPayload & { error?: string; hint?: string };
         if (cancelled) return;
         setHttpStatus(res.status);
         if (!res.ok) {
-          setError(data.error ?? "Nepodařilo se načíst dostupné časy.");
+          const base = data.error ?? "Nepodařilo se načíst dostupné časy.";
+          setError(data.hint ? `${base} ${data.hint}` : base);
           setPayload({
             ...FALLBACK_PAYLOAD,
             calendarTimezone: data.calendarTimezone ?? FALLBACK_PAYLOAD.calendarTimezone,

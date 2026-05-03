@@ -55,7 +55,15 @@ export async function getBusyIntervals(timeMin: string, timeMax: string): Promis
     },
   });
 
-  const busy = res.data.calendars?.[calendarId]?.busy ?? [];
+  // Per-calendar errors (e.g. 403 hidden in 200 body) — see Calendar API freebusy response.
+  const calEntry = res.data.calendars?.[calendarId];
+  const fbErrors = calEntry?.errors;
+  if (fbErrors?.length) {
+    const detail = fbErrors.map((e) => `${e.domain ?? ""}:${e.reason ?? ""}`).join("; ");
+    throw new Error(`FREEBUSY_CALENDAR_ERRORS:${detail}`);
+  }
+
+  const busy = calEntry?.busy ?? [];
   return busy
     .filter((b): b is { start?: string; end?: string } => Boolean(b.start && b.end))
     .map((b) => ({

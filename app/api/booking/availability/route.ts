@@ -53,9 +53,20 @@ export async function GET(request: Request) {
     return NextResponse.json(payload);
   } catch (e) {
     console.error("[booking/availability]", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    const is403 =
+      msg.includes("403") ||
+      msg.includes("Forbidden") ||
+      msg.includes("insufficient") ||
+      msg.includes("Insufficient Permission");
+    const scopeHint =
+      is403 || msg.includes("FREEBUSY")
+        ? "OAuth token pravděpodobně nemá scope pro FreeBusy. V OAuth Playground zvolte https://www.googleapis.com/auth/calendar (nejjednodušší), nebo vedle calendar.events přidejte https://www.googleapis.com/auth/calendar.freebusy a znovu vygenerujte refresh token. Samotný scope calendar.events pro metodu freebusy nestačí — viz dokumentace Google k freebusy.query."
+        : undefined;
     return NextResponse.json(
       {
         error: "Rezervaci se teď nepodařilo načíst. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.",
+        ...(scopeHint ? { hint: scopeHint } : {}),
         ...EMPTY_GRID,
       },
       { status: 502 },
