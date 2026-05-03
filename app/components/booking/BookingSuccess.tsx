@@ -1,11 +1,11 @@
 "use client";
 
 type Reservation = {
-  meetingTypeLabel: string;
   date: string;
   timeLabel: string;
   name: string;
   email: string;
+  reasonPreview: string;
 };
 
 type BookingSuccessProps = {
@@ -22,8 +22,8 @@ export function BookingSuccess({ reservation, dateDisplay }: BookingSuccessProps
       </p>
       <ul className="space-y-2 text-sm text-muted">
         <li>
-          <span className="font-semibold text-foreground">Typ: </span>
-          {reservation.meetingTypeLabel}
+          <span className="font-semibold text-foreground">Důvod schůzky: </span>
+          {reservation.reasonPreview}
         </li>
         <li>
           <span className="font-semibold text-foreground">Datum: </span>

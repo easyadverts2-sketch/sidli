@@ -7,7 +7,7 @@ import {
   getWorkWindowMinutesForDay,
 } from "./config";
 import { getBusyIntervals } from "./google-calendar";
-import type { AvailabilityDayPayload, MeetingTypeId, TimeSlot, WorkWindowDto } from "./types";
+import type { AvailabilityDayPayload, TimeSlot, WorkWindowDto } from "./types";
 import { filterAvailableSlots, generateSlotsForDay, pragueDayToUtcRange } from "./slots";
 
 const DISPLAY_START_HOUR = 7;
@@ -17,10 +17,7 @@ const DISPLAY_END_HOUR = 20;
  * FreeBusy + generated slots + work window for one Prague calendar day.
  * Matches Google Calendar API: freebusy.query returns busy[]; we never expose event titles.
  */
-export async function getAvailabilityDayPayload(
-  dateStr: string,
-  meetingTypeId: MeetingTypeId,
-): Promise<AvailabilityDayPayload> {
+export async function getAvailabilityDayPayload(dateStr: string): Promise<AvailabilityDayPayload> {
   const { timeMin, timeMax } = pragueDayToUtcRange(dateStr);
   const busy = await getBusyIntervals(timeMin, timeMax);
 
@@ -36,7 +33,7 @@ export async function getAvailabilityDayPayload(
     ? { startMinute: rawWindow.start, endMinute: rawWindow.end }
     : null;
 
-  const candidates = generateSlotsForDay(dateStr, meetingTypeId);
+  const candidates = generateSlotsForDay(dateStr);
   const slots = filterAvailableSlots(candidates, busy);
 
   return {
@@ -49,10 +46,7 @@ export async function getAvailabilityDayPayload(
   };
 }
 
-export async function getAvailableSlotsForDay(
-  dateStr: string,
-  meetingTypeId: MeetingTypeId,
-): Promise<TimeSlot[]> {
-  const p = await getAvailabilityDayPayload(dateStr, meetingTypeId);
+export async function getAvailableSlotsForDay(dateStr: string): Promise<TimeSlot[]> {
+  const p = await getAvailabilityDayPayload(dateStr);
   return p.slots;
 }

@@ -33,6 +33,39 @@ export function getCalendarId(): string {
   return process.env.GOOGLE_CALENDAR_ID?.trim() || "primary";
 }
 
+type FreeBusyCalEntry = {
+  busy?: Array<{ start?: string | null; end?: string | null } | null> | null;
+  errors?: Array<{ domain?: string | null; reason?: string | null }> | null;
+};
+
+function resolveFreeBusyCalendarEntry(
+  calendars: Record<string, FreeBusyCalEntry> | null | undefined,
+  requestedId: string,
+): { entry: FreeBusyCalEntry | undefined; resolvedKey: string | undefined } {
+  if (!calendars || typeof calendars !== "object") {
+    return { entry: undefined, resolvedKey: undefined };
+  }
+  if (calendars[requestedId]) {
+    return { entry: calendars[requestedId], resolvedKey: requestedId };
+  }
+  for (const key of Object.keys(calendars)) {
+    try {
+      if (decodeURIComponent(key) === requestedId) {
+        return { entry: calendars[key], resolvedKey: key };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const reqLo = requestedId.toLowerCase();
+  for (const key of Object.keys(calendars)) {
+    if (key.toLowerCase() === reqLo) {
+      return { entry: calendars[key], resolvedKey: key };
+    }
+  }
+  return { entry: undefined, resolvedKey: undefined };
+}
+
 /**
  * Returns busy intervals from Google Calendar FreeBusy for the given half-open UTC range.
  * @param timeMin RFC3339
@@ -55,17 +88,26 @@ export async function getBusyIntervals(timeMin: string, timeMax: string): Promis
     },
   });
 
-  // Per-calendar errors (e.g. 403 hidden in 200 body) — see Calendar API freebusy response.
-  const calEntry = res.data.calendars?.[calendarId];
-  const fbErrors = calEntry?.errors;
+  const calendars = res.data.calendars as Record<string, FreeBusyCalEntry> | undefined;
+  if (!calendars || Object.keys(calendars).length === 0) {
+    throw new Error("FREEBUSY_NO_CALENDARS_IN_RESPONSE");
+  }
+
+  const { entry: calEntry } = resolveFreeBusyCalendarEntry(calendars, calendarId);
+  if (!calEntry) {
+    const keys = Object.keys(calendars).join(", ");
+    throw new Error(`FREEBUSY_UNKNOWN_CALENDAR_ID:requested=${calendarId};responseKeys=${keys}`);
+  }
+
+  const fbErrors = calEntry.errors;
   if (fbErrors?.length) {
     const detail = fbErrors.map((e) => `${e.domain ?? ""}:${e.reason ?? ""}`).join("; ");
     throw new Error(`FREEBUSY_CALENDAR_ERRORS:${detail}`);
   }
 
-  const busy = calEntry?.busy ?? [];
+  const busy = calEntry.busy ?? [];
   return busy
-    .filter((b): b is { start?: string; end?: string } => Boolean(b.start && b.end))
+    .filter((b): b is { start?: string; end?: string } => Boolean(b?.start && b?.end))
     .map((b) => ({
       start: new Date(b.start as string),
       end: new Date(b.end as string),

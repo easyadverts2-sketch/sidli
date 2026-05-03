@@ -1,15 +1,15 @@
 import { addDays, addMinutes, isAfter, isBefore } from "date-fns";
 import { formatInTimeZone, toDate } from "date-fns-tz";
 import {
+  BOOKING_SLOT_DURATION_MINUTES,
   BOOKING_TIMEZONE,
   BUFFER_AFTER_MEETING_MINUTES,
   MAX_BOOKING_DAYS_AHEAD,
   MIN_BOOKING_LEAD_HOURS,
   SLOT_GRID_MINUTES,
-  getMeetingTypeById,
   getWorkWindowMinutesForDay,
 } from "./config";
-import type { BusyInterval, MeetingTypeId, TimeSlot } from "./types";
+import type { BusyInterval, TimeSlot } from "./types";
 
 function pragueWallToUtc(isoLocal: string): Date {
   return toDate(isoLocal, { timeZone: BOOKING_TIMEZONE });
@@ -21,16 +21,9 @@ function utcToPragueLabel(d: Date): string {
 
 /**
  * Candidate slots for a calendar day in Prague, before busy filtering.
- * Respects work hours, meeting duration, grid, min lead and max horizon.
+ * Respects work hours, {@link BOOKING_SLOT_DURATION_MINUTES}, grid, min lead and max horizon.
  */
-export function generateSlotsForDay(
-  dateStr: string,
-  meetingTypeId: MeetingTypeId,
-  now: Date = new Date(),
-): TimeSlot[] {
-  const meeting = getMeetingTypeById(meetingTypeId);
-  if (!meeting) return [];
-
+export function generateSlotsForDay(dateStr: string, now: Date = new Date()): TimeSlot[] {
   const dayStart = pragueWallToUtc(`${dateStr}T00:00:00`);
 
   if (Number.isNaN(dayStart.getTime())) return [];
@@ -45,7 +38,7 @@ export function generateSlotsForDay(
   const minStart = addMinutes(now, MIN_BOOKING_LEAD_HOURS * 60);
 
   const { start: winStartMin, end: winEndMin } = window;
-  const duration = meeting.durationMinutes;
+  const duration = BOOKING_SLOT_DURATION_MINUTES;
 
   const slots: TimeSlot[] = [];
 

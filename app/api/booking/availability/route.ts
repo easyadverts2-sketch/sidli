@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getAvailabilityDayPayload } from "@/app/lib/booking/availability-query";
 import { BOOKING_TIMEZONE } from "@/app/lib/booking/config";
+import { formatGoogleApiError } from "@/app/lib/booking/google-errors";
 import { isGoogleCalendarConfigured } from "@/app/lib/booking/google-calendar";
 import { isBookingCalendarDateAllowed } from "@/app/lib/booking/slots";
 import { availabilityQuerySchema } from "@/app/lib/booking/validation";
@@ -19,7 +20,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const parsed = availabilityQuerySchema.safeParse({
     date: searchParams.get("date") ?? "",
-    meetingType: searchParams.get("meetingType") ?? "",
   });
 
   if (!parsed.success) {
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const { date, meetingType } = parsed.data;
+  const { date } = parsed.data;
 
   if (!isBookingCalendarDateAllowed(date)) {
     return NextResponse.json(
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const payload = await getAvailabilityDayPayload(date, meetingType);
+    const payload = await getAvailabilityDayPayload(date);
     return NextResponse.json(payload);
   } catch (e) {
     console.error("[booking/availability]", e);
@@ -61,12 +61,14 @@ export async function GET(request: Request) {
       msg.includes("Insufficient Permission");
     const scopeHint =
       is403 || msg.includes("FREEBUSY")
-        ? "OAuth token pravděpodobně nemá scope pro FreeBusy. V OAuth Playground zvolte https://www.googleapis.com/auth/calendar (nejjednodušší), nebo vedle calendar.events přidejte https://www.googleapis.com/auth/calendar.freebusy a znovu vygenerujte refresh token. Samotný scope calendar.events pro metodu freebusy nestačí — viz dokumentace Google k freebusy.query."
+        ? "OAuth token pravděpodobně nemá scope pro FreeBusy. V OAuth Playground zvolte https://www.googleapis.com/auth/calendar a znovu vygenerujte refresh token."
         : undefined;
+    const diagnostic = formatGoogleApiError(e);
     return NextResponse.json(
       {
         error: "Rezervaci se teď nepodařilo načíst. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.",
         ...(scopeHint ? { hint: scopeHint } : {}),
+        diagnostic,
         ...EMPTY_GRID,
       },
       { status: 502 },

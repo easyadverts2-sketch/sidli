@@ -2,10 +2,9 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { toDate } from "date-fns-tz";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { BOOKING_TIMEZONE, MEETING_TYPES, getMeetingTypeById } from "@/app/lib/booking/config";
-import type { MeetingTypeId } from "@/app/lib/booking/types";
+import { BOOKING_TIMEZONE } from "@/app/lib/booking/config";
 import type { TimeSlot } from "@/app/lib/booking/types";
 
 import { BookingError } from "./BookingError";
@@ -13,11 +12,9 @@ import { BookingSuccess } from "./BookingSuccess";
 import { BookingSummary } from "./BookingSummary";
 import type { ContactFields } from "./ContactFormStep";
 import { ContactFormStep } from "./ContactFormStep";
-import { DateStep } from "./DateStep";
-import { MeetingTypeStep } from "./MeetingTypeStep";
-import { TimeSlotStep } from "./TimeSlotStep";
+import { DateAndTimeStep } from "./DateAndTimeStep";
 
-const STEPS = ["Typ schůzky", "Datum", "Čas", "Kontakt", "Souhrn"] as const;
+const STEPS = ["Datum a čas", "Kontakt", "Souhrn"] as const;
 
 const BENEFITS = [
   "30 minut bez závazku",
@@ -38,7 +35,6 @@ function formatLongDate(ymd: string): string {
 
 export function BookingSection() {
   const [step, setStep] = useState(0);
-  const [meetingTypeId, setMeetingTypeId] = useState<MeetingTypeId | null>(null);
   const [dateStr, setDateStr] = useState<string | null>(null);
   const [slot, setSlot] = useState<TimeSlot | null>(null);
   const [contact, setContact] = useState<ContactFields>({
@@ -52,23 +48,21 @@ export function BookingSection() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
     reservation: {
-      meetingTypeLabel: string;
       date: string;
       timeLabel: string;
       name: string;
       email: string;
+      reasonPreview: string;
     };
   } | null>(null);
 
-  const meeting = useMemo(
-    () => (meetingTypeId ? getMeetingTypeById(meetingTypeId) : undefined),
-    [meetingTypeId],
-  );
+  const canNextFromDateTime = Boolean(dateStr && slot);
 
   const canNextFromContact =
     contact.name.trim().length >= 2 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim()) &&
     contact.phone.trim().length >= 5 &&
+    contact.message.trim().length >= 10 &&
     contact.gdprConsent;
 
   function goNext() {
@@ -82,7 +76,7 @@ export function BookingSection() {
   }
 
   async function submitBooking() {
-    if (!meetingTypeId || !dateStr || !slot || !meeting) return;
+    if (!dateStr || !slot) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -90,7 +84,6 @@ export function BookingSection() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          meetingType: meetingTypeId,
           date: dateStr,
           startTime: slot.start,
           name: contact.name.trim(),
@@ -102,12 +95,13 @@ export function BookingSection() {
       });
       const data = (await res.json()) as {
         error?: string;
+        diagnostic?: string;
         reservation?: {
-          meetingTypeLabel: string;
           date: string;
           timeLabel: string;
           name: string;
           email: string;
+          reasonPreview: string;
         };
       };
       if (res.status === 409) {
@@ -115,10 +109,10 @@ export function BookingSection() {
         return;
       }
       if (!res.ok) {
-        setError(
+        const base =
           data.error ??
-            "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.",
-        );
+          "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.";
+        setError(data.diagnostic ? `${base}\n\nDiagnostika: ${data.diagnostic}` : base);
         return;
       }
       if (data.reservation) {
@@ -190,33 +184,20 @@ export function BookingSection() {
             transition={{ duration: 0.2 }}
           >
             {step === 0 ? (
-              <MeetingTypeStep
-                types={MEETING_TYPES}
-                selectedId={meetingTypeId}
-                onSelect={(id) => {
-                  setMeetingTypeId(id);
-                  setSlot(null);
-                }}
+              <DateAndTimeStep
+                dateStr={dateStr}
+                onDateChange={setDateStr}
+                slot={slot}
+                onSlotChange={setSlot}
               />
             ) : null}
-            {step === 1 && meetingTypeId ? (
-              <DateStep value={dateStr} onChange={(d) => { setDateStr(d); setSlot(null); }} />
-            ) : null}
-            {step === 2 && meetingTypeId && dateStr ? (
-              <TimeSlotStep meetingType={meetingTypeId} date={dateStr} value={slot} onChange={setSlot} />
-            ) : null}
-            {step === 3 ? (
+            {step === 1 ? (
               <ContactFormStep {...contact} onChange={(patch) => setContact((c) => ({ ...c, ...patch }))} />
             ) : null}
-            {step === 4 && meeting && dateStr && slot ? (
+            {step === 2 && dateStr && slot ? (
               <div className="space-y-4">
                 {error ? <BookingError message={error} /> : null}
-                <BookingSummary
-                  meeting={meeting}
-                  dateLabel={formatLongDate(dateStr)}
-                  slot={slot}
-                  contact={contact}
-                />
+                <BookingSummary dateLabel={formatLongDate(dateStr)} slot={slot} contact={contact} />
               </div>
             ) : null}
           </motion.div>
@@ -234,10 +215,7 @@ export function BookingSection() {
             type="button"
             className="btn-primary"
             disabled={
-              (step === 0 && !meetingTypeId) ||
-              (step === 1 && !dateStr) ||
-              (step === 2 && !slot) ||
-              (step === 3 && !canNextFromContact)
+              (step === 0 && !canNextFromDateTime) || (step === 1 && !canNextFromContact)
             }
             onClick={goNext}
           >

@@ -15,6 +15,12 @@ export const MIN_BOOKING_LEAD_HOURS = 24;
 /** Maximum days ahead a date can be chosen. */
 export const MAX_BOOKING_DAYS_AHEAD = 45;
 
+/** Veřejná rezervace bez výběru typu — délka slotu v minutách (shoda s úvodní konzultací). */
+export const BOOKING_SLOT_DURATION_MINUTES = 30;
+
+/** Krátký název do Google Calendar (summary) a do UI. */
+export const BOOKING_EVENT_LABEL = "Konzultace";
+
 export const MEETING_TYPES: MeetingTypeDefinition[] = [
   {
     id: "introductory",

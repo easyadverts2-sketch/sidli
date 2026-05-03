@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getAvailableSlotsForDay } from "@/app/lib/booking/availability-query";
-import { BOOKING_SOURCE_LINE, getMeetingTypeById } from "@/app/lib/booking/config";
+import { BOOKING_EVENT_LABEL, BOOKING_SOURCE_LINE } from "@/app/lib/booking/config";
 import { createBookingEvent, isGoogleCalendarConfigured } from "@/app/lib/booking/google-calendar";
+import { formatGoogleApiError } from "@/app/lib/booking/google-errors";
 import { sanitizeCalendarText } from "@/app/lib/booking/sanitize";
 import { pragueCalendarDateFromUtcInstant } from "@/app/lib/booking/slots";
 import { createBookingBodySchema } from "@/app/lib/booking/validation";
@@ -10,7 +11,6 @@ import { createBookingBodySchema } from "@/app/lib/booking/validation";
 // TODO: add durable rate limiting (e.g. Redis / edge middleware) per IP + email.
 
 function buildEventDescription(input: {
-  meetingLabel: string;
   name: string;
   email: string;
   phone: string;
@@ -20,11 +20,11 @@ function buildEventDescription(input: {
   return [
     "Nová rezervace z webu.",
     "",
-    `Typ schůzky: ${sanitizeCalendarText(input.meetingLabel, 120)}`,
+    `Důvod schůzky: ${msg}`,
+    "",
     `Jméno: ${sanitizeCalendarText(input.name, 200)}`,
     `E-mail: ${sanitizeCalendarText(input.email, 120)}`,
     `Telefon: ${sanitizeCalendarText(input.phone, 40)}`,
-    `Poznámka: ${msg || "—"}`,
     "",
     "Souhlas se zpracováním údajů: Ano",
     `Zdroj: ${BOOKING_SOURCE_LINE}`,
@@ -48,10 +48,6 @@ export async function POST(request: Request) {
   }
 
   const body = parsed.data;
-  const meeting = getMeetingTypeById(body.meetingType);
-  if (!meeting) {
-    return NextResponse.json({ error: "Neplatný typ schůzky." }, { status: 400 });
-  }
 
   const pragueDate = pragueCalendarDateFromUtcInstant(body.startTime);
   if (pragueDate !== body.date) {
@@ -67,11 +63,14 @@ export async function POST(request: Request) {
 
   let available: Awaited<ReturnType<typeof getAvailableSlotsForDay>>;
   try {
-    available = await getAvailableSlotsForDay(body.date, body.meetingType);
+    available = await getAvailableSlotsForDay(body.date);
   } catch (e) {
     console.error("[booking/create] freebusy", e);
     return NextResponse.json(
-      { error: "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo." },
+      {
+        error: "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.",
+        diagnostic: formatGoogleApiError(e),
+      },
       { status: 502 },
     );
   }
@@ -92,17 +91,16 @@ export async function POST(request: Request) {
   const createMeet =
     process.env.BOOKING_CREATE_MEET_LINK === "1" || process.env.BOOKING_CREATE_MEET_LINK === "true";
 
-  const summary = `Schůzka – ${meeting.label} – ${sanitizeCalendarText(body.name, 200)}`;
+  const summary = `Schůzka – ${BOOKING_EVENT_LABEL} – ${sanitizeCalendarText(body.name, 200)}`;
 
   try {
     const { htmlLink } = await createBookingEvent({
       summary,
       description: buildEventDescription({
-        meetingLabel: meeting.label,
         name: body.name,
         email: body.email,
         phone: body.phone,
-        message: body.message ?? "",
+        message: body.message,
       }),
       startIso: chosen.start,
       endIso: chosen.end,
@@ -110,21 +108,26 @@ export async function POST(request: Request) {
       createMeetLink: createMeet,
     });
 
+    const reasonPreview = body.message.length > 120 ? `${body.message.slice(0, 120)}…` : body.message;
+
     return NextResponse.json({
       ok: true,
       htmlLink: htmlLink ?? null,
       reservation: {
-        meetingTypeLabel: meeting.label,
         date: body.date,
         timeLabel: chosen.label,
         name: body.name,
         email: body.email,
+        reasonPreview,
       },
     });
   } catch (e) {
     console.error("[booking/create] insert", e);
     return NextResponse.json(
-      { error: "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo." },
+      {
+        error: "Rezervaci se teď nepodařilo dokončit. Zkuste to prosím znovu za chvíli nebo nás kontaktujte přímo.",
+        diagnostic: formatGoogleApiError(e),
+      },
       { status: 502 },
     );
   }

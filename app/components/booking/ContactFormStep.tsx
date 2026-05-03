@@ -50,9 +50,11 @@ export function ContactFormStep({
       />
       <textarea
         className="form-field min-h-26"
-        placeholder="Poznámka / s čím chcete pomoct"
+        placeholder="Důvod schůzky — napište stručně, s čím chcete pomoct (povinné, min. pár vět)"
         value={message}
         onChange={(e) => onChange({ message: e.target.value })}
+        required
+        minLength={10}
       />
       <label className="mt-2 flex cursor-pointer items-start gap-3 text-sm text-muted">
         <input
